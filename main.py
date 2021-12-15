@@ -1,18 +1,25 @@
 # -*- coding: utf-8 -*-
+from decouple import config
+import sqlite3
 import telebot
-TOKEN = '5004954394:AAGvH_L3o23Sj3QV9TES8NYBMSyokDi_XPs'
+from bd.users_base import UsersBase
 
-bot = telebot.TeleBot(TOKEN)
-
-
-@bot.message_handler(content_types=["text"])
-def get_text_message(message):
-    if (message.text == '/hello-world'
-            or message.text.lower() == 'привет'):
-        bot.send_message(message.chat.id, message.text)
-    else:
-        bot.send_message(message.chat.id, 'Неизвестная команда')
+cl = UsersBase('./bd/users.db')
 
 
-if __name__ == '__main__':
-    bot.infinity_polling()
+
+# bot = telebot.TeleBot(config('TOKEN'))
+#
+#
+# @bot.message_handler(content_types=["text"])
+# def get_text_message(message):
+#     if (message.text == '/hello-world'
+#             or message.text.lower() == 'привет'):
+#         bot.send_message(message.chat.id, message.text)
+#     else:
+#         bot.send_message(message.chat.id, 'Неизвестная команда')
+#
+# def start():
+#
+# if __name__ == '__main__':
+#     bot.infinity_polling()
