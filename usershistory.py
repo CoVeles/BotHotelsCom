@@ -2,47 +2,43 @@ import sqlite3
 
 
 class UsersLog:
-
-    def __init__(self, dbname="users.sqlite"):
+    def __init__(self, dbname="users_history.sqlite"):
         self.dbname = dbname
-        self.conn = sqlite3.connect(dbname)
+        self.connection = sqlite3.connect(dbname)
+        self.cursor = self.connection.cursor()
 
     def setup(self):
+        """Creating a table and index if not exist"""
         tbl_stmt = '''CREATE TABLE IF NOT EXISTS usersLog (
                     user_id integer,
                     command text not null,
-                    datetime text
+                    datetime text,
                     hotels text)'''
         user_id_idx = '''CREATE INDEX IF NOT EXISTS usersIndex 
                         ON usersLog (user_id ASC)'''
-        self.conn.execute(tbl_stmt)
-        self.conn.execute(user_id_idx)
-        self.conn.commit()
+        with self.connection:
+            self.cursor.execute(tbl_stmt)
+            self.cursor.execute(user_id_idx)
 
-    def add_users_command(self, user_id: int, command: str,
-                          datetime: str, hotels: str):
+    def add_user_command(self, user_id: str, command: str,
+                          datetime: str, hotels: str) -> None:
         stmt = '''INSERT INTO 
                 usersLog (user_id, command, datetime, hotels) 
                 VALUES (?, ?, ?, ?)'''
         args = (user_id, command, datetime, hotels)
-        self.conn.execute(stmt, args)
-        self.conn.commit()
+        with self.connection:
+            self.cursor.execute(stmt, args)
 
     def delete_user(self, user_id: int):
         stmt = "DELETE FROM usersLog WHERE user_id = (?)"
         args = (user_id,)
-        self.conn.execute(stmt, args)
-        self.conn.commit()
+        self.connection.execute(stmt, args)
+        self.connection.commit()
 
-    def get_commands_for_user(self, user_id: int) -> str:
-        stmt = "SELECT user_id FROM usersLog WHERE user_id = (?)"
+    def get_commands_for_user(self, user_id: int) -> list:
+        stmt = "SELECT * FROM usersLog WHERE user_id = (?)"
         args = (user_id,)
-        return ', '.join(x[0] for x in self.conn.execute(stmt, args))
+        with self.connection:
+            result: list = self.cursor.execute(stmt, args).fetchall()
+        return result
 
-    # def is_user_is_known(self, user_id: int):
-    #     stmt = "SELECT * FROM usersIndex WHERE user_id = (?)"
-    #     args = (user_id,)
-
-    def close(self):
-        """ Закрываем текущее соединение с БД """
-        self.conn.close()

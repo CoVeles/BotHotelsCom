@@ -37,7 +37,9 @@ def get_locations_from_api(loc_name):
     except ParsingLocError:
         return {'err': 'Error of parsing info from Hotels api'}
     except ParsingLocNull:
-        return {'err': 'Nothing found for your request'}
+        return {'err': 'Nothing found for your request'
+                       '\nTry to input new name '
+                       'or restart for new command'}
     except Exception as e:
         return {'err': f'Error: {e}'}
 
@@ -52,5 +54,7 @@ def parse_data_to_list(data: requests) -> dict:
             return locations
         else:
             raise ParsingLocNull
+    except ParsingLocNull:
+        raise ParsingLocNull
     except Exception:
         raise ParsingLocError

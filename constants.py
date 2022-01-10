@@ -5,17 +5,6 @@ MAIN_MENU = {
     'bestdeal': 'Get the cheapest hotels closer to the center',
     'history': 'Get the history of user commands'
 }
-MIN_PRICES = {
-    0: '0 $',
-    10: '10 $',
-    50: '50 $',
-}
-MAX_PRICES = {
-    20: '20 $',
-    60: '60 $',
-    100: '100 $',
-    200: '200 $'
-}
 HOTELS_AMOUNT = {
     1: 'Only one hotel',
     3: 'Three hotels',
@@ -30,4 +19,26 @@ PHOTO_AMOUNT = {
     1: 'Only one picture',
     3: 'Three pictures',
     5: 'Five pictures',
+}
+DISTANCE = {
+    10: '10 km',
+    20: '20 km',
+    30: '30 km',
+}
+HELP_INFO = {
+    'Info about commands': ' - additional info about commands',
+    'Get the cheapest hotels': ' - the bot trying to find the cheapest'
+                               ' hotels in the selected town',
+    'Get the most expensive hotels': ' - the bot trying to find the '
+                                     'most expensive hotels '
+                                     'in the selected town',
+    'Get the cheapest hotels closer to the center': 'The same',
+    'Get the history of user commands': ' - the bot shows the '
+                                        'history about used commands'
+                                        ' and which hotels have been found',
+    'Recommendations': ' - a city name should consist only of the letters'
+                       ' of the English alphabet and the hyphen character.'
+                       ' The price is an integer or real number, the maximum'
+                       ' price must be greater than the minimum and not equal'
+                       ' to zero. '
 }
