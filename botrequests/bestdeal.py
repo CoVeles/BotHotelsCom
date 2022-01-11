@@ -6,7 +6,7 @@ import requests
 X_RAPIDAPI_KEY = config('RAPIDAPI_KEY')
 
 
-def get_hotels(req_params: dict):
+def get_hotels(req_params: dict) -> list:
     date = datetime.now().strftime("%Y-%m-%d")
     url = "https://hotels4.p.rapidapi.com/properties/list"
 
@@ -32,13 +32,14 @@ def get_hotels(req_params: dict):
     try:
         response = requests.request("GET", url, headers=headers, params=querystring)
     except requests.exceptions.RequestException as e:
-        return {'req_err': e}
+        return [{'req_err': e}]
     except Exception as e:
-        return {'err': e}
+        return [{'err': e}]
     data = response.json()
-    results = data['data']['body']['searchResults']['results']
+    results: list = data['data']['body']['searchResults']['results']
     hotels: list = parse_hotels_info(results, int(req_params['pictures']))
-    return hotels
+    return [hotel for hotel in hotels
+            if hotel['Distance to city center:'] <= req_params['distance']]
 
 
 def parse_hotels_info(results: list, number_of_pics: int):
@@ -46,7 +47,6 @@ def parse_hotels_info(results: list, number_of_pics: int):
     for result in results:
         hotel = dict()
         try:
-            print(result)
             # hotel['id'] = result['id']
             hotel['Hotel:'] = result['name']
             if result['address'].get('streetAddress'):
@@ -62,6 +62,6 @@ def parse_hotels_info(results: list, number_of_pics: int):
                 try:
                     hotel['pictures']: list = get_pics_urls(result['id'], number_of_pics)
                 except Exception as e:
-                    hotel['pictures']: list = f'Error getting pictures: {e}'
+                    hotel['pictures']: list = [f'Error getting pictures: {e}']
         hotels.append(hotel)
     return hotels

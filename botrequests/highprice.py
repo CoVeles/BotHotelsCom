@@ -28,9 +28,9 @@ def get_hotels(req_params: dict):
     try:
         response = requests.request("GET", url, headers=headers, params=querystring)
     except requests.exceptions.RequestException as e:
-        return {'req_err': e}
+        return [{'req_err': e}]
     except Exception as e:
-        return {'err': e}
+        return [{'err': e}]
     data = response.json()
     results = data['data']['body']['searchResults']['results']
     hotels: list = parse_hotels_info(results, int(req_params['pictures']))
@@ -57,6 +57,6 @@ def parse_hotels_info(results: list, number_of_pics: int):
                 try:
                     hotel['pictures']: list = get_pics_urls(result['id'], number_of_pics)
                 except Exception as e:
-                    hotel['pictures']: list = f'Error getting pictures: {e}'
+                    hotel['pictures']: list = [f'Error getting pictures: {e}']
         hotels.append(hotel)
     return hotels

@@ -39,6 +39,7 @@ class User:
         return cls.users_dct.get(user_id)
 
     def init_req_params(self):
+        self.state = 0
         self.req_params: dict = {'loc_id': '', 'hotels_amount': 0,
                                  'price_min': 0, 'price_max': 0,
                                  'distance': 0, 'pictures': 0}
@@ -65,11 +66,13 @@ def create_keyboard(items: dict, prefix: str):
 
 @bot.message_handler(commands=['start'])
 def on_start(message):
-    if not User.get_user(message.chat.id):
+    user = User.get_user(message.chat.id)
+    if not user:
         User(message.chat.id)
         text = 'Welcome to the bot for searching hotels!' \
                '\nSelect a command:'
     else:
+        user.init_req_params()
         text = '\nSelect a command:'
     bot.send_message(
         message.chat.id,
@@ -95,11 +98,13 @@ def command_callback(call: CallbackQuery):
                          'For correct work begin with main menu!'
                          '\nTo call main menu tap: /start')
     else:
-        if command[0] == 'cmd':
+        if command[0] == 'cmd' and user.state == 0:
             """User tapped a command in main menu"""
             if command[1] == 'history':
+                user.state = 9
                 display_history(user_id=call.message.chat.id)
             elif command[1] == 'help':
+                user.state = 9
                 for name, info in constants.HELP_INFO.items():
                     bot.send_message(call.message.chat.id,
                                      name + info)
@@ -108,22 +113,23 @@ def command_callback(call: CallbackQuery):
             else:
                 text = 'Input town to search for hotels'
                 user.command = command[1]
+                user.state = 1
                 bot.edit_message_text(chat_id=call.message.chat.id,
                                       message_id=call.message.message_id,
                                       text=text)
-        elif command[0] == 'loc':
+        elif command[0] == 'loc' and user.state == 1:
             """Location is accepted"""
             user.req_params['loc_id'] = command[1]
-            user.state = 1
+            user.state = 2
             """Ask amount of hotels"""
             bot.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
                 text='Select amount of hotels to view',
                 reply_markup=create_keyboard(constants.HOTELS_AMOUNT, 'ham'))
-        elif command[0] == 'ham':
+        elif command[0] == 'ham' and user.state == 2:
             """Amount of hotels is accepted"""
-            user.state = 2
+            user.state = 3
             user.req_params['hotels_amount'] = command[1]
             """Ask about photo"""
             bot.edit_message_text(
@@ -131,10 +137,10 @@ def command_callback(call: CallbackQuery):
                 message_id=call.message.message_id,
                 text='Do you want to see hotel pictures?',
                 reply_markup=create_keyboard(constants.PHOTO_ASK, 'pic'))
-        elif command[0] == 'pic':
+        elif command[0] == 'pic' and user.state == 3:
             """The decision about photo is accepted"""
             if command[1] == 'yes':
-                user.state = 3
+                user.state = 4
                 """Ask photo amount"""
                 bot.edit_message_text(
                     chat_id=call.message.chat.id,
@@ -142,15 +148,16 @@ def command_callback(call: CallbackQuery):
                     text='Select the number of photos to show',
                     reply_markup=create_keyboard(constants.PHOTO_AMOUNT, 'pnum'))
             else:
-                user.state = 4
+                user.state = 5
                 if user.command == 'bestdeal':
                     """Ask min price"""
                     text = 'Input minimum price for hotel'
                     bot.send_message(call.message.chat.id, text)
                 else:
                     display_hotels(user, call.message.chat.id)
-        elif command[0] == 'pnum':
+        elif command[0] == 'pnum' and user.state == 4:
             """Amount of photo is accepted"""
+            user.state = 6
             user.req_params['pictures'] = command[1]
             if user.command == 'bestdeal':
                 """Ask min price"""
@@ -158,8 +165,13 @@ def command_callback(call: CallbackQuery):
                 bot.send_message(call.message.chat.id, text)
             else:
                 display_hotels(user, call.message.chat.id)
-        elif command[0] == 'dst':
+        elif command[0] == 'dst' and user.state == 8:
+            user.req_params['distance'] = command[1]
             display_hotels(user, call.message.chat.id)
+        else:
+            text = 'Unknown command. Please begin with main menu' \
+                   '\nFor main menu tap /start'
+            bot.send_message(call.message.chat.id, text)
 
 
 @bot.message_handler(content_types=['text'])
@@ -169,11 +181,11 @@ def get_text_messages(message) -> None:
         bot.send_message(message.chat.id, 'For correct work begin with main menu!'
                                           '\nTo call main menu tap: /start')
     else:
-        if user.state == 0:
+        if user.state == 1:
             display_found_locations_menu(message.text, message.chat.id)
-        elif user.state == 4:
+        elif user.state == 5 or user.state == 6:
             check_and_save_min_price(message.text, user)
-        elif user.state == 5:
+        elif user.state == 7:
             check_and_save_max_price(message.text, user)
         else:
             bot.send_message(message.chat.id, 'misunderstanding')
@@ -181,8 +193,8 @@ def get_text_messages(message) -> None:
 
 def check_and_save_min_price(text, user):
     try:
-        price = abs(float(text.replace(',', '.')))
-        user.state = 5
+        price = abs(int(float(text.replace(',', '.'))))
+        user.state = 7
         user.req_params['price_min'] = price
         bot.send_message(user.user_id,
                          'Input maximum price for hotel')
@@ -195,14 +207,14 @@ def check_and_save_min_price(text, user):
 
 def check_and_save_max_price(text, user):
     try:
-        price = abs(float(text.replace(',', '.')))
+        price = abs(int(float(text.replace(',', '.'))))
         if price <= user.req_params['price_min']:
             bot.send_message(
                 user.user_id,
                 'Maximum price must be more than minimum price'
                 '\nTry again to input maximum price for hotel')
         else:
-            user.state = 6
+            user.state = 8
             user.req_params['price_max'] = price
             bot.send_message(chat_id=user.user_id,
                              text='Select maximum distance from centre',
@@ -228,6 +240,7 @@ def display_found_locations_menu(mess_text, user_id):
 
 
 def display_hotels(user: User, chat_id):
+    user.state == 9
     hotels = []
     if user.command == 'lowprice':
         hotels = lowprice.get_hotels(user.req_params)
@@ -237,7 +250,8 @@ def display_hotels(user: User, chat_id):
         hotels = bestdeal.get_hotels(user.req_params)
 
     if len(hotels) == 0:
-        text = 'Sorry, but there is no any hotel there'
+        text = 'Sorry, but there is no any hotel ' \
+               'with such parameters'
         bot.send_message(chat_id, text)
     else:
         hotels_lst = []
