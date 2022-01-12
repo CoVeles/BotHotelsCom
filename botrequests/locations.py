@@ -1,6 +1,7 @@
 from decouple import config
 import requests
 import re
+from loguru import logger
 
 X_RAPIDAPI_KEY = config('RAPIDAPI_KEY')
 
@@ -22,7 +23,7 @@ def get_locations_from_api(loc_name):
         'x-rapidapi-host': 'hotels4.p.rapidapi.com',
         'x-rapidapi-key': X_RAPIDAPI_KEY
     }
-
+    logger.info(f'Attempt to request locations from API')
     try:
         response = requests.request('GET', url, headers=headers,
                                     params=querystring, timeout=20)
@@ -37,7 +38,7 @@ def get_locations_from_api(loc_name):
     except ParsingLocError:
         return {'err': 'Error of parsing info from Hotels api'}
     except ParsingLocNull:
-        return {'err': 'Nothing found for your request'
+        return {'null': 'Nothing found for your request'
                        '\nTry to input new name '
                        'or restart for new command'}
     except Exception as e:

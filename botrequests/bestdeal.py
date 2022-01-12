@@ -1,5 +1,5 @@
 from decouple import config
-from datetime import datetime
+from datetime import timedelta
 from botrequests.pictures import get_pics_urls
 import requests
 
@@ -7,15 +7,14 @@ X_RAPIDAPI_KEY = config('RAPIDAPI_KEY')
 
 
 def get_hotels(req_params: dict) -> list:
-    date = datetime.now().strftime("%Y-%m-%d")
     url = "https://hotels4.p.rapidapi.com/properties/list"
 
     querystring = {
         "destinationId": req_params['loc_id'],
         "pageNumber": "1",
         "pageSize": str(req_params['hotels_amount']),
-        "checkIn": date,
-        "checkOut": date,
+        "checkIn": req_params['check_in'],
+        "checkOut": req_params['check_in'] + timedelta(req_params['days']),
         "adults1": "1",
         "sortOrder": "DISTANCE_FROM_LANDMARK",
         "locale": "en_US",

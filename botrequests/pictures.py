@@ -4,7 +4,7 @@ import requests
 X_RAPIDAPI_KEY = config('RAPIDAPI_KEY')
 
 
-def get_pics_urls(hotel_id: str, number_of_pics: int):
+def get_pics_urls(hotel_id: str, number_of_pics: int) -> list:
     url = "https://hotels4.p.rapidapi.com/properties/get-hotel-photos"
 
     querystring = {"id": hotel_id}

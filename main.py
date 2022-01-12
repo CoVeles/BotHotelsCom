@@ -1,82 +1,57 @@
 # -*- coding: utf-8 -*-
-from decouple import config
-from botrequests.locations import get_locations_from_api
-from botrequests import lowprice, highprice, bestdeal
-import constants
-from telebot.callback_data import CallbackData, CallbackDataFilter
-from telebot.types import Message, CallbackQuery
-from telebot import types, TeleBot
-from usershistory import UsersLog
 from datetime import datetime
 
+from loguru import logger
+from decouple import config
+from telebot import types, TeleBot
+from telebot.types import CallbackQuery
+from telegram_bot_calendar import DetailedTelegramCalendar, LSTEP
+import constants
+import log_setup
+from botrequests import lowprice, highprice, bestdeal
+from botrequests.locations import get_locations_from_api
+from usershistory import User as User, UserHistory
+
+logger.configure(**log_setup.logger_setup)
 bot = TeleBot(config('TOKEN'))
-user_log = UsersLog()
-user_log.setup()
+user_history = UserHistory()
+user_history.setup()
 
 
-class User:
-    """
-    This class contains a dictionary of users of session
-    Every user has a state of step and requirement parameters for
-    requests to Hotels API
-    """
-    users_dct = dict()
-
-    def __init__(self, user_id):
-        self.user_id: int = user_id
-        self.command: str = 'start'
-        self.state: int = 0
-        self.req_params = dict()
-        User.add_user(user_id, self)
-
-    @classmethod
-    def add_user(cls, user_id, user):
-        user.init_req_params()
-        cls.users_dct[user_id] = user
-
-    @classmethod
-    def get_user(cls, user_id):
-        return cls.users_dct.get(user_id)
-
-    def init_req_params(self):
-        self.state = 0
-        self.req_params: dict = {'loc_id': '', 'hotels_amount': 0,
-                                 'price_min': 0, 'price_max': 0,
-                                 'distance': 0, 'pictures': 0}
+# button_cancel = types.ReplyKeyboardMarkup()
+# button_cancel.add()
+# hide_cancel = types.ReplyKeyboardRemove()
 
 
-button_cancel = types.ReplyKeyboardMarkup()
-button_cancel.add()
-hide_cancel = types.ReplyKeyboardRemove()
-
-
-def create_keyboard(items: dict, prefix: str):
+def create_keyboard(items: dict, prefix: str) -> types.InlineKeyboardMarkup:
     return types.InlineKeyboardMarkup(
         keyboard=[
             [
                 types.InlineKeyboardButton(
                     text=name,
-                    callback_data=f'{prefix} {id}'
+                    callback_data=f'{prefix} {command}'
                 )
             ]
-            for id, name in items.items()
+            for command, name in items.items()
         ]
     )
 
 
 @bot.message_handler(commands=['start'])
 def on_start(message):
-    user = User.get_user(message.chat.id)
+    user_id = message.chat.id
+    logger.info(f'User {user_id} tapped /start')
+    user = User.get_user(user_id)
     if not user:
-        User(message.chat.id)
-        text = 'Welcome to the bot for searching hotels!' \
-               '\nSelect a command:'
+        User(user_id)
+        bot.send_message(user_id,
+                         'Welcome to the bot for searching hotels!')
     else:
         user.init_req_params()
-        text = '\nSelect a command:'
+
     bot.send_message(
-        message.chat.id,
-        text,
+        user_id,
+        '\nSelect a command:',
         reply_markup=create_keyboard(constants.MAIN_MENU, 'cmd')
     )
 
@@ -88,160 +63,217 @@ def on_start(message):
 #                           text='Select a command:',
 #                           reply_markup=create_keyboard(constants.MAIN_MENU, 'cmd'))
 
+@bot.callback_query_handler(func=DetailedTelegramCalendar.func())
+def calendar_callback(call: CallbackQuery):
+    user_id = call.message.chat.id
+    user = User.get_user(user_id)
+
+    if not user:
+        logger.warning(f'User {user_id} tried to begin without /start')
+        bot.send_message(user_id,
+                         'For correct work begin with main menu!'
+                         '\nTo call main menu tap: /start')
+    else:
+        result, key, step = DetailedTelegramCalendar().process(call.data)
+        if not result and key:
+            bot.edit_message_text(chat_id=user_id,
+                                  message_id=call.message.message_id,
+                                  text=f'Select {LSTEP[step]}',
+                                  reply_markup=key)
+        elif result:
+            user.req_params['check_in'] = result
+            user.set_state(4)
+            logger.info(f'{user_id} selected check-in date')
+            text = 'For how many days do you plan to stay at the hotel?'
+            bot.edit_message_text(chat_id=user_id,
+                                  message_id=call.message.message_id,
+                                  text=text)
+
 
 @bot.callback_query_handler(func=None)
 def command_callback(call: CallbackQuery):
     command: list = call.data.split()
-    user = User.get_user(call.message.chat.id)
+    user_id = call.message.chat.id
+    user = User.get_user(user_id)
+
     if not user:
-        bot.send_message(call.message.chat.id,
+        logger.warning(f'User {user_id} tried to begin without /start')
+        bot.send_message(user_id,
                          'For correct work begin with main menu!'
                          '\nTo call main menu tap: /start')
     else:
         if command[0] == 'cmd' and user.state == 0:
-            """User tapped a command in main menu"""
+            logger.info(f'{user_id} tapped command: {command[1]}')
             if command[1] == 'history':
-                user.state = 9
-                display_history(user_id=call.message.chat.id)
+                # user.state = 11
+                display_history(user_id=user_id)
             elif command[1] == 'help':
-                user.state = 9
-                for name, info in constants.HELP_INFO.items():
-                    bot.send_message(call.message.chat.id,
-                                     name + info)
-                bot.send_message(call.message.chat.id,
-                                 'To begin tap: /start')
+                # user.state = 11
+                display_help(user_id=user_id)
             else:
                 text = 'Input town to search for hotels'
                 user.command = command[1]
                 user.state = 1
-                bot.edit_message_text(chat_id=call.message.chat.id,
+                bot.edit_message_text(chat_id=user_id,
                                       message_id=call.message.message_id,
                                       text=text)
         elif command[0] == 'loc' and user.state == 1:
-            """Location is accepted"""
+            logger.info(f'{user_id} selected specific location')
             user.req_params['loc_id'] = command[1]
             user.state = 2
             """Ask amount of hotels"""
             bot.edit_message_text(
-                chat_id=call.message.chat.id,
+                chat_id=user_id,
                 message_id=call.message.message_id,
                 text='Select amount of hotels to view',
                 reply_markup=create_keyboard(constants.HOTELS_AMOUNT, 'ham'))
         elif command[0] == 'ham' and user.state == 2:
-            """Amount of hotels is accepted"""
+            logger.info(f'{user_id} selected amount of hotels')
             user.state = 3
             user.req_params['hotels_amount'] = command[1]
-            """Ask about photo"""
-            bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                text='Do you want to see hotel pictures?',
-                reply_markup=create_keyboard(constants.PHOTO_ASK, 'pic'))
-        elif command[0] == 'pic' and user.state == 3:
-            """The decision about photo is accepted"""
+            """Ask check-in date"""
+            calendar, step = DetailedTelegramCalendar().build()
+            bot.send_message(user_id, 'Select check-in date')
+            bot.send_message(user_id,
+                             f'Select {LSTEP[step]}',
+                             reply_markup=calendar)
+        elif command[0] == 'pic' and user.state == 5:
+            logger.info(f'{user_id} selected the need of pictures')
             if command[1] == 'yes':
-                user.state = 4
+                user.state = 6
                 """Ask photo amount"""
                 bot.edit_message_text(
-                    chat_id=call.message.chat.id,
+                    chat_id=user_id,
                     message_id=call.message.message_id,
                     text='Select the number of photos to show',
                     reply_markup=create_keyboard(constants.PHOTO_AMOUNT, 'pnum'))
             else:
-                user.state = 5
-                if user.command == 'bestdeal':
-                    """Ask min price"""
-                    text = 'Input minimum price for hotel'
-                    bot.send_message(call.message.chat.id, text)
-                else:
-                    display_hotels(user, call.message.chat.id)
-        elif command[0] == 'pnum' and user.state == 4:
-            """Amount of photo is accepted"""
-            user.state = 6
+                user.state = 7
+                step_after_pics_query(user)
+        elif command[0] == 'pnum' and user.state == 6:
+            logger.info(f'{user_id} selected amount of pictures')
+            user.state = 7
             user.req_params['pictures'] = command[1]
-            if user.command == 'bestdeal':
-                """Ask min price"""
-                text = 'Input minimum price for hotel'
-                bot.send_message(call.message.chat.id, text)
-            else:
-                display_hotels(user, call.message.chat.id)
-        elif command[0] == 'dst' and user.state == 8:
+            step_after_pics_query(user)
+        elif command[0] == 'dst' and user.state == 10:
+            logger.info(f'{user_id} selected distance')
             user.req_params['distance'] = command[1]
-            display_hotels(user, call.message.chat.id)
+            display_hotels(user, user_id)
         else:
+            logger.warning(f'{user_id} selected wrong command')
             text = 'Unknown command. Please begin with main menu' \
                    '\nFor main menu tap /start'
-            bot.send_message(call.message.chat.id, text)
+            bot.send_message(user_id, text)
 
 
 @bot.message_handler(content_types=['text'])
 def get_text_messages(message) -> None:
-    user = User.get_user(message.chat.id)
+    user_id = message.chat.id
+    user = User.get_user(user_id)
     if not user:
-        bot.send_message(message.chat.id, 'For correct work begin with main menu!'
-                                          '\nTo call main menu tap: /start')
+        logger.warning(f'User {user_id} tried to begin without /start')
+        bot.send_message(user_id, 'For correct work begin with main menu!'
+                                  '\nTo call main menu tap: /start')
     else:
         if user.state == 1:
-            display_found_locations_menu(message.text, message.chat.id)
-        elif user.state == 5 or user.state == 6:
+            display_found_locations_menu(message.text, user_id)
+        elif user.state == 4:
+            check_and_save_days_delta(message.text,
+                                      message.message_id, user)
+        elif user.command == 'bestdeal' and user.state == 7:
             check_and_save_min_price(message.text, user)
-        elif user.state == 7:
+        elif user.command == 'bestdeal' and user.state == 8:
             check_and_save_max_price(message.text, user)
         else:
-            bot.send_message(message.chat.id, 'misunderstanding')
+            logger.warning(f'{user_id} typed wrong command')
+            bot.send_message(user_id, 'misunderstanding')
 
 
-def check_and_save_min_price(text, user):
+def check_and_save_days_delta(text: str, mess_id: int, user: User) -> None:
     try:
+        logger.info(f'{user.user_id} typed amount of days')
+        days = abs(int(text))
+        if days == 0:
+            days += 1
+        user.state = 5
+        user.req_params['days'] = days
+        """Ask about photo"""
+        bot.send_message(
+            chat_id=user.user_id,
+            text= 'Do you want to see hotel pictures?',
+            reply_markup=create_keyboard(constants.PHOTO_ASK, 'pic')
+        )
+        # bot.edit_message_text(
+        #     chat_id=user.user_id,
+        #     message_id=mess_id,
+        #     text='Do you want to see hotel pictures?',
+        #     reply_markup=create_keyboard(constants.PHOTO_ASK, 'pic'))
+    except Exception as e:
+        logger.error(f'User {user.user_id}: {e}')
+        bot.send_message(
+            user.user_id,
+            'You input wrong amount of days'
+            '\nTry again to input amount of staying days')
+
+
+def check_and_save_min_price(text: str, user: User) -> None:
+    try:
+        logger.info(f'{user.user_id} typed min price')
         price = abs(int(float(text.replace(',', '.'))))
-        user.state = 7
+        user.state = 8
         user.req_params['price_min'] = price
         bot.send_message(user.user_id,
                          'Input maximum price for hotel')
-    except Exception:
+    except Exception as e:
+        logger.error(f'User {user.user_id}: {e}')
         bot.send_message(
             user.user_id,
             'You input wrong price'
             '\nTry again to input minimum price for hotel')
 
 
-def check_and_save_max_price(text, user):
+def check_and_save_max_price(text: str, user: User) -> None:
     try:
+        logger.info(f'{user.user_id} typed max price')
         price = abs(int(float(text.replace(',', '.'))))
         if price <= user.req_params['price_min']:
+            logger.error(f'User {user.user_id}: typed wrong max price')
             bot.send_message(
                 user.user_id,
                 'Maximum price must be more than minimum price'
                 '\nTry again to input maximum price for hotel')
         else:
-            user.state = 8
+            user.state = 9
             user.req_params['price_max'] = price
             bot.send_message(chat_id=user.user_id,
                              text='Select maximum distance from centre',
                              reply_markup=create_keyboard(
                                  constants.DISTANCE, 'dst'))
-    except Exception:
+    except Exception as e:
+        logger.error(f'User {user.user_id}: {e}')
         bot.send_message(
             user.user_id,
             'You input wrong price.'
             '\nTry again to input maximum price for hotel')
 
 
-def display_found_locations_menu(mess_text, user_id):
+def display_found_locations_menu(mess_text: str, user_id: int) -> None:
     """Display menu of found locations"""
     locations = get_locations_from_api(mess_text)
     if locations.get('err'):
-        bot.send_message(user_id, locations.get('err'))
-        bot.send_message(user_id, 'For restart tap: /start')
+        logger.error(f"User {user_id} {locations['err']}")
+        bot.send_message(user_id, locations['err'])
+        bot.send_message(user_id,
+                         'Type another town or tap /start')
     else:
         bot.send_message(chat_id=user_id,
                          text='Select a specific location',
                          reply_markup=create_keyboard(locations, 'loc'))
 
 
-def display_hotels(user: User, chat_id):
-    user.state == 9
+def display_hotels(user: User, chat_id: int) -> None:
     hotels = []
+    logger.info(f'Attempt to request hotels info from API')
     if user.command == 'lowprice':
         hotels = lowprice.get_hotels(user.req_params)
     elif user.command == 'highprice':
@@ -250,54 +282,96 @@ def display_hotels(user: User, chat_id):
         hotels = bestdeal.get_hotels(user.req_params)
 
     if len(hotels) == 0:
+        logger.info(f'{chat_id} there is no any hotel in request')
         text = 'Sorry, but there is no any hotel ' \
-               'with such parameters'
+               'with such parameters' \
+               '\nFor restart tap /start'
         bot.send_message(chat_id, text)
     else:
         hotels_lst = []
         for hotel in hotels:
-            hotels_lst.append(hotel.get('Hotel:'))
-            text = ''
-            for name, info in hotel.items():
-                if name != 'pictures':
-                    text += f'{name} {info}\n'
-            bot.send_message(chat_id, text)
-            if hotel.get('pictures'):
-                display_pictures(hotel['pictures'], chat_id)
-        save_user_log(user.user_id, user.command, hotels_lst)
+            if hotel.get('err'):
+                logger.error(f"User {chat_id}: {hotel.get['err']}")
+            else:
+                hotels_lst.append(hotel.get('Hotel:'))
+                text = ''
+                for name, info in hotel.items():
+                    if name != 'pictures':
+                        text += f'{name} {info}\n'
+                try:
+                    total_price = int(hotel.get('Price:')[1:].replace(',', ''))
+                    total_price *= user.req_params['days']
+                    text += f"Price for {user.req_params['days']} days:" \
+                            f" ${total_price}"
+                except Exception as e:
+                    logger.error(f'User {chat_id}: {e}')
+
+                bot.send_message(chat_id, text)
+
+                if hotel.get('pictures'):
+                    display_pictures(hotel['pictures'], chat_id)
+        save_user_history(user.user_id, user.command, hotels_lst)
     bot.send_message(chat_id, 'For restart tap: /start')
 
 
-def display_pictures(pictures: list, chat_id):
-    for picture_url in pictures:
-        if picture_url.startswith('http'):
-            bot.send_photo(chat_id, picture_url)
+def display_pictures(pictures: list, chat_id: int) -> None:
+    try:
+        if len(pictures) > 1:
+            medias = [types.InputMediaPhoto(img_url, 'View')
+                      for img_url in pictures]
+            bot.send_media_group(chat_id=chat_id,
+                                 media=medias,
+                                 allow_sending_without_reply=True)
         else:
-            bot.send_message(chat_id, picture_url)
+            if pictures[0].startswith('http'):
+                bot.send_photo(chat_id, pictures[0])
+            else:
+                logger.error(f'User {chat_id}: {pictures[0]}')
+                bot.send_message(chat_id, pictures[0])
+    except Exception as e:
+        logger.error(f'User {chat_id}: {e}')
 
 
-def save_user_log(user_id, command, hotels: list):
+def save_user_history(user_id: int, command: str, hotels: list) -> None:
     date = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
     hotels_str = ', '.join(hotels)
-    user_log = UsersLog()
-    user_log.add_user_command(user_id, command, date, hotels_str)
+    user_hist = UserHistory()
+    user_hist.add_user_command(user_id, command, date, hotels_str)
 
 
-def display_history(user_id: int):
-    user_log = UsersLog()
-    log: list = user_log.get_commands_for_user(user_id)
-    if len(log) == 0:
+def display_history(user_id: int) -> None:
+    user_hist = UserHistory()
+    history: list = user_hist.get_commands_for_user(user_id)
+    if len(history) == 0:
         text = 'There is no any command in your history'
         bot.send_message(user_id, text)
     else:
         text = 'Look through your commands history:'
         bot.send_message(user_id, text)
-        for item in log:
+        for item in history:
             text = f'Command: {item[1]}'
             text += f'\nDate & Time: {item[2]}'
             text += f'\nFounded hotels: {item[3]}'
             bot.send_message(user_id, text)
     bot.send_message(user_id, 'For restart tap: /start')
+
+
+def display_help(user_id: int) -> None:
+    for name, info in constants.HELP_INFO.items():
+        bot.send_message(user_id,
+                         name + info)
+    bot.send_message(user_id,
+                     'To begin searching tap: /start')
+
+
+def step_after_pics_query(user: User) -> None:
+    if user.command == 'bestdeal':
+        """Ask min price"""
+        text = 'Input minimum price for hotel'
+        bot.send_message(user.user_id, text)
+    else:
+        user.set_state(11)
+        display_hotels(user, user.user_id)
 
 
 if __name__ == '__main__':
