@@ -296,7 +296,12 @@ def display_hotels(user: User, chat_id: int) -> None:
                 hotels_lst.append(hotel.get('Hotel:'))
                 text = ''
                 for name, info in hotel.items():
-                    if name != 'pictures':
+                    if name == 'id':
+                        text += f'Hotel URL: https://ru.hotels.com/ho' \
+                                f'{info}\n'
+                    elif name == 'pictures':
+                        display_pictures(hotel['pictures'], chat_id)
+                    else:
                         text += f'{name} {info}\n'
                 try:
                     total_price = int(hotel.get('Price:')[1:].replace(',', ''))
@@ -306,10 +311,8 @@ def display_hotels(user: User, chat_id: int) -> None:
                 except Exception as e:
                     logger.error(f'User {chat_id}: {e}')
 
-                bot.send_message(chat_id, text)
+                bot.send_message(chat_id, text, disable_web_page_preview=True)
 
-                if hotel.get('pictures'):
-                    display_pictures(hotel['pictures'], chat_id)
         save_user_history(user.user_id, user.command, hotels_lst)
     bot.send_message(chat_id, 'For restart tap: /start')
 

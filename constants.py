@@ -21,9 +21,9 @@ PHOTO_AMOUNT = {
     5: 'Five pictures',
 }
 DISTANCE = {
+    5: '5 km',
     10: '10 km',
     20: '20 km',
-    30: '30 km',
 }
 HELP_INFO = {
     'Info about commands': ' - additional info about commands',

@@ -41,13 +41,13 @@ def parse_hotels_info(results: list, number_of_pics: int):
     for result in results:
         hotel = dict()
         try:
-            # hotel['id'] = result['id']
             hotel['Hotel:'] = result['name']
             if result['address'].get('streetAddress'):
                 hotel['Address:'] = result['address']['streetAddress']
             else:
                 hotel['Address:'] = result['address']['locality']
             hotel['Distance to city center:'] = result['landmarks'][0]['distance']
+            hotel['id'] = result['id']
             hotel['Price:'] = result['ratePlan']['price']['current']
         except Exception as e:
             hotel['err'] = f'Parsing error: {e}'
