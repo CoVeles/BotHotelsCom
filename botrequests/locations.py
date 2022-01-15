@@ -1,6 +1,7 @@
 from decouple import config
 import requests
 import re
+from constants import LANGUAGE_FOR_REQUEST, CURRENCY
 from loguru import logger
 
 X_RAPIDAPI_KEY = config('RAPIDAPI_KEY')
@@ -14,16 +15,18 @@ class ParsingLocNull(Exception):
     pass
 
 
-def get_locations_from_api(loc_name):
+def get_locations_from_api(loc_name: str, lang_id: int,
+                           user_id: int) -> dict:
     url = 'https://hotels4.p.rapidapi.com/locations/v2/search'
     querystring = {'query': loc_name,
-                   'locale': 'en_US',
-                   'currency': 'USD'}
+                   'locale': LANGUAGE_FOR_REQUEST[lang_id],
+                   'currency': CURRENCY[lang_id]}
     headers = {
         'x-rapidapi-host': 'hotels4.p.rapidapi.com',
         'x-rapidapi-key': X_RAPIDAPI_KEY
     }
     logger.info(f'Attempt to request locations from API')
+    locations = {}
     try:
         response = requests.request('GET', url, headers=headers,
                                     params=querystring, timeout=20)
@@ -31,27 +34,28 @@ def get_locations_from_api(loc_name):
         if data.get('message'):
             raise requests.exceptions.RequestException
 
-        locations: dict = parse_data_to_list(data)
-        return locations
+        locations: dict = parse_locations(data)
+
     except requests.exceptions.RequestException as e:
-        return {'err': f'Server error: {e}'}
+        logger.error(f'{user_id}: req_err - {e}')
     except ParsingLocError:
-        return {'err': 'Error of parsing info from Hotels api'}
+        logger.error(f'{user_id}: parsing locations err')
     except ParsingLocNull:
-        return {'null': 'Nothing found for your request'
-                       '\nTry to input new name '
-                       'or restart for new command'}
+        logger.error(f'{user_id}: locations not found')
     except Exception as e:
-        return {'err': f'Error: {e}'}
+        logger.error(f'{user_id}: locations err - {e}')
+    return locations
 
 
-def parse_data_to_list(data: requests) -> dict:
+def parse_locations(data: requests) -> dict:
     try:
         locations = dict()
         if len(data.get('suggestions')[0].get('entities')) > 0:
             for item in data.get('suggestions')[0].get('entities'):
+
                 location_name = re.sub('<([^<>]*)>', '', item['caption'])
-                locations[item['destinationId']] = location_name
+                locations[item['destinationId']] = (location_name,
+                                                    location_name)
             return locations
         else:
             raise ParsingLocNull

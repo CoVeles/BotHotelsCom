@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
-
 from loguru import logger
 from decouple import config
 from telebot import types, TeleBot
@@ -21,11 +20,6 @@ logger.configure(**log_setup.logger_setup)
 bot = TeleBot(config('TOKEN'))
 user_history = UserHistory()
 user_history.setup()
-
-
-# button_cancel = types.ReplyKeyboardMarkup()
-# button_cancel.add()
-# hide_cancel = types.ReplyKeyboardRemove()
 
 
 def create_keyboard(items: dict, prefix: str,
@@ -50,9 +44,9 @@ def on_start(message):
     user = User.get_user(user_id)
     if not user:
         User(user_id)
+        user = User.get_user(user_id)
         text = constants.PHRASES['welcome'][user.lang_id]
         bot.send_message(user_id, text)
-        user = User.get_user(user_id)
     else:
         user.init_req_params()
 
@@ -65,13 +59,6 @@ def on_start(message):
     )
 
 
-# @bot.callback_query_handler(func=lambda c: c.data == 'back')
-# def back_callback(call: types.CallbackQuery):
-#     bot.edit_message_text(chat_id=call.message.chat.id,
-#                           message_id=call.message.message_id,
-#                           text='Select a command:',
-#                           reply_markup=create_keyboard(constants.MAIN_MENU, 'cmd'))
-
 @bot.callback_query_handler(func=DetailedTelegramCalendar.func())
 def calendar_callback(call: CallbackQuery):
     user_id = call.message.chat.id
@@ -80,7 +67,9 @@ def calendar_callback(call: CallbackQuery):
     except NoneUsrError:
         pass
     else:
-        result, key, step = DetailedTelegramCalendar().process(call.data)
+        locale = constants.LANGUAGE_FOR_CALENDAR[user.lang_id]
+        result, key, step = DetailedTelegramCalendar(
+            locale=locale).process(call.data)
         if not result and key:
             text = f"{constants.PHRASES['select'][user.lang_id]} " \
                    f"{LSTEP[step]}"
@@ -116,6 +105,9 @@ def command_callback(call: CallbackQuery):
             elif command[1] == 'help':
                 user.state = 11
                 display_help(user_id=user_id, lang_id=user.lang_id)
+            elif command[1] == 'lang':
+                ask_language(user_id=user_id, lang_id=user.lang_id,
+                             mess_id=call.message.message_id)
             else:
                 text = constants.PHRASES['input_town'][user.lang_id]
                 user.command = command[1]
@@ -138,10 +130,11 @@ def command_callback(call: CallbackQuery):
         elif command[0] == 'ham' and user.state == 2:
             logger.info(f'{user_id} selected amount of hotels')
             user.state = 3
-            user.req_params['hotels_amount'] = command[1]
+            user.req_params['hotels_amount'] = int(command[1])
             """Ask check-in date"""
+            locale = constants.LANGUAGE_FOR_CALENDAR[user.lang_id]
             calendar, step = DetailedTelegramCalendar(
-                locale=constants.LANGUAGE_FOR_CALENDAR[user.lang_id]
+                locale=locale
             ).build()
             text = constants.PHRASES['sel_date'][user.lang_id]
             bot.send_message(user_id, text)
@@ -168,12 +161,18 @@ def command_callback(call: CallbackQuery):
         elif command[0] == 'pnum' and user.state == 6:
             logger.info(f'{user_id} selected amount of pictures')
             user.state = 7
-            user.req_params['pictures'] = command[1]
+            user.req_params['pictures'] = int(command[1])
             step_after_pics_query(user)
-        elif command[0] == 'dst' and user.state == 10:
+        elif command[0] == 'dst' and user.state == 9:
             logger.info(f'{user_id} selected distance')
             user.req_params['distance'] = command[1]
             display_hotels(user, user_id)
+        elif command[0] == 'lang' and user.state == 0:
+            logger.info(f'{user_id} selected language: {command[1]}')
+            user.lang_id = int(command[1])
+            text = f"{constants.PHRASES['Language'][user.lang_id]}" \
+                   f"\n{constants.PHRASES['restart'][user.lang_id]}"
+            bot.send_message(user_id, text)
         else:
             logger.warning(f'{user_id} selected wrong command')
             text = f"{constants.PHRASES['err_cmd'][user.lang_id]}" \
@@ -221,11 +220,6 @@ def check_and_save_days_delta(text: str, mess_id: int, user: User) -> None:
             reply_markup=create_keyboard(constants.PHOTO_ASK,
                                          'pic', user.lang_id)
         )
-        # bot.edit_message_text(
-        #     chat_id=user.user_id,
-        #     message_id=mess_id,
-        #     text='Do you want to see hotel pictures?',
-        #     reply_markup=create_keyboard(constants.PHOTO_ASK, 'pic'))
     except Exception as e:
         logger.error(f'User {user.user_id}: {e}')
         text = constants.PHRASES['err_days'][user.lang_id]
@@ -276,10 +270,8 @@ def check_and_save_max_price(text: str, user: User) -> None:
 def display_found_locations_menu(mess_text: str, user_id: int,
                                  lang_id: int) -> None:
     """Display menu of found locations"""
-    locations = get_locations_from_api(mess_text)
-    if locations.get('err'):
-        logger.error(f"User {user_id} {locations['err']}")
-        # bot.send_message(user_id, locations['err'])
+    locations = get_locations_from_api(mess_text, lang_id, user_id)
+    if len(locations) == 0:
         text = constants.PHRASES['err_town_search'][lang_id]
         bot.send_message(user_id, text)
     else:
@@ -294,11 +286,14 @@ def display_hotels(user: User, chat_id: int) -> None:
     hotels = []
     logger.info(f'Attempt to request hotels info from API')
     if user.command == 'lowprice':
-        hotels = lowprice.get_hotels(user.req_params)
+        hotels = lowprice.get_hotels(user.req_params, user.user_id,
+                                     user.lang_id)
     elif user.command == 'highprice':
-        hotels = highprice.get_hotels(user.req_params)
+        hotels = highprice.get_hotels(user.req_params, user.user_id,
+                                      user.lang_id)
     elif user.command == 'bestdeal':
-        hotels = bestdeal.get_hotels(user.req_params)
+        hotels = bestdeal.get_hotels(user.req_params, user.user_id,
+                                     user.lang_id)
 
     if len(hotels) == 0:
         logger.info(f'{chat_id} there is no any hotel in request')
@@ -354,26 +349,29 @@ def display_history(user_id: int, lang_id: int) -> None:
         text = constants.PHRASES['hist_mess'][lang_id]
         bot.send_message(user_id, text)
         for item in history:
-            text = f'Command: {item[1]}'
-            text += f'\nDate & Time: {item[2]}'
+            text = f"{constants.PHRASES['Command'][lang_id]}" \
+                   f": {item[1]}"
+            text += f"\n{constants.PHRASES['DateTime'][lang_id]}" \
+                    f": {item[2]}"
             bot.send_message(user_id, text)
             for hotel_text in item[3].split('|'):
-                bot.send_message(user_id, hotel_text)
-    bot.send_message(user_id, 'For restart tap: /start')
+                bot.send_message(user_id, hotel_text,
+                                 disable_web_page_preview=True)
+    text = constants.PHRASES['restart'][lang_id]
+    bot.send_message(user_id, text)
 
 
 def display_help(user_id: int, lang_id: int) -> None:
     for name, info in constants.HELP_INFO[lang_id].items():
-        bot.send_message(user_id,
-                         name + info)
-    bot.send_message(user_id,
-                     'To begin searching tap: /start')
+        bot.send_message(user_id, name + info)
+    text = constants.PHRASES['restart'][lang_id]
+    bot.send_message(user_id, text)
 
 
 def step_after_pics_query(user: User) -> None:
     if user.command == 'bestdeal':
         """Ask min price"""
-        text = 'Input minimum price for hotel'
+        text = constants.PHRASES['input_minp'][user.lang_id]
         bot.send_message(user.user_id, text)
     else:
         user.set_state(11)
@@ -384,12 +382,23 @@ def get_user(user_id: int) -> User:
     user = User.get_user(user_id)
     if not user:
         logger.warning(f'User {user_id} tried to begin without /start')
-        text = f"{constants.PHRASES['none_usr'][user.lang_id]}" \
-               f"\n{constants.PHRASES['restart'][user.lang_id]}"
+        text = f"{constants.PHRASES['none_usr'][0]}" \
+               f"\n{constants.PHRASES['restart'][0]}"
         bot.send_message(user_id, text)
         raise NoneUsrError
     else:
         return user
+
+
+def ask_language(user_id: int, lang_id: int,
+                 mess_id: int) -> None:
+    text = constants.PHRASES['sel_lang'][lang_id]
+    bot.edit_message_text(
+        chat_id=user_id,
+        message_id=mess_id,
+        text=text,
+        reply_markup=create_keyboard(constants.LANGUAGE_MENU,
+                                     'lang', lang_id))
 
 
 if __name__ == '__main__':

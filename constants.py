@@ -10,8 +10,8 @@ MAIN_MENU = {
                 'История запросов пользователя')
 }
 LANGUAGE_MENU = {
-    0: 'English',
-    1: 'Русский'
+    0: ('English', 'Английский'),
+    1: ('Russian', 'Русский')
 }
 LANGUAGE_FOR_REQUEST = {
     0: 'en_US',
@@ -87,7 +87,7 @@ PHRASES = {
     'welcome': ('Welcome to the bot for searching hotels!',
                 'Добро пожаловать в бот поиска отелей!'),
     'hist_mess': ('Look through your commands history:',
-                 'Вот список введенных вами команд'),
+                  'Вот список введенных вами команд'),
     'sel_cmd': ('Select a command:', 'Выберите команду'),
     'sel_ah': ('Select amount of hotels to view',
                'Выберите  количество отелей для просмотра'),
@@ -96,6 +96,7 @@ PHRASES = {
                'Выберите количество фотографий для вывода'),
     'sel_loc': ('Select a specific location',
                 'Выберите конкретное место'),
+    'sel_lang': ('Select language', 'Выберите язык'),
     'input_town': ('Input town to search for hotels',
                    'Введите название города для поиска'),
     'input_minp': ('Input minimum price for hotel',
@@ -106,7 +107,6 @@ PHRASES = {
                    'Выберите максимальное расстояние от центра'),
     'need_pics': ('Do you want to see hotel pictures?',
                   'Вывести фотографии отеля?'),
-    'select': ('Select', 'Выберите'),
     'days': ('For how many days do you plan to stay at the hotel?',
              'Сколько дней вы планируете находится в отеле?'),
     'restart': ('To call main menu and restart tap: /start',
@@ -130,13 +130,16 @@ PHRASES = {
                         '\nType another town or tap /start',
                         'Неудачная попытка поиска города.'
                         '\nВведите новое название или нажмите /start'),
-    'Hotel': ('Hotel:', 'Название:'),
-    'Address': ('Address:', 'Адрес:'),
-    'Distance': ('Distance to city center:',
-                 'Расстояние до центра города:'),
+    'Hotel': ('Hotel', 'Название'),
+    'Address': ('Address', 'Адрес'),
+    'Distance': ('Distance to city center',
+                 'Расстояние до центра города'),
     'URL': ('Hotel URL', 'URL отеля'),
     'Price': ('Price a day:', 'Цена за один день:'),
     'Tot_price': ('Total_price:', 'Общая цена:'),
     'Command': ('Command', 'Команда'),
+    'DateTime': ('Date&Time', 'Дата и время'),
+    'select': ('Select', 'Выберите'),
     'Curr': ('$', 'руб'),
+    'Language': ('You selected English', 'Вы выбрали Русский язык'),
 }
