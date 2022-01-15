@@ -2,11 +2,14 @@ from decouple import config
 from datetime import timedelta
 from botrequests.pictures import get_pics_urls
 import requests
+from constants import PHRASES
+from loguru import logger
 
 X_RAPIDAPI_KEY = config('RAPIDAPI_KEY')
 
 
-def get_hotels(req_params: dict):
+def get_hotels(req_params: dict, user_id: int,
+               lang_id: int) -> list:
     url = "https://hotels4.p.rapidapi.com/properties/list"
 
     querystring = {
@@ -24,38 +27,65 @@ def get_hotels(req_params: dict):
         'x-rapidapi-host': "hotels4.p.rapidapi.com",
         'x-rapidapi-key': X_RAPIDAPI_KEY
     }
-    try:
-        response = requests.request("GET", url, headers=headers, params=querystring)
-    except requests.exceptions.RequestException as e:
-        return [{'err': e}]
-    except Exception as e:
-        return [{'err': e}]
-    data = response.json()
-    results = data['data']['body']['searchResults']['results']
-    hotels: list = parse_hotels_info(results, int(req_params['pictures']))
-    return hotels
-
-
-def parse_hotels_info(results: list, number_of_pics: int):
     hotels = []
-    for result in results:
+    try:
+        response = requests.request("GET", url, headers=headers,
+                                    params=querystring)
+        data = response.json()
+        results = data['data']['body']['searchResults']['results']
+        for result in results:
+            try:
+                hotel = parse_hotel_info(result, user_id,
+                                         req_params, lang_id)
+                hotels.append(hotel)
+            except Exception as e:
+                logger.error(f'{user_id} parsing hotel info err - {e}')
+    except requests.exceptions.RequestException as e:
+        logger.error(f'{user_id}: req_err - {e}')
+    except Exception as e:
+        logger.error(f'{user_id} {e}')
+    finally:
+        return hotels
+
+
+def parse_hotel_info(result: dict, user_id: int,
+                     req_params: dict, lang_id: int) -> any:
+    try:
         hotel = dict()
-        try:
-            hotel['Hotel:'] = result['name']
-            if result['address'].get('streetAddress'):
-                hotel['Address:'] = result['address']['streetAddress']
-            else:
-                hotel['Address:'] = result['address']['locality']
-            hotel['Distance to city center:'] = result['landmarks'][0]['distance']
-            hotel['id'] = result['id']
-            hotel['Price:'] = result['ratePlan']['price']['current']
-        except Exception as e:
-            hotel['err'] = f'Parsing error: {e}'
+        hotel['text'] = ''
+
+        name = result.get('name')
+        hotel['text'] += f"{PHRASES['Hotel'][lang_id]}: {name}\n"
+
+        if result['address'].get('streetAddress'):
+            address = result['address']['streetAddress']
         else:
-            if number_of_pics > 0:
-                try:
-                    hotel['pictures']: list = get_pics_urls(result['id'], number_of_pics)
-                except Exception as e:
-                    hotel['pictures']: list = [f'Error getting pictures: {e}']
-        hotels.append(hotel)
-    return hotels
+            address = result['address'].get('locality')
+        hotel['text'] += f"{PHRASES['Address'][lang_id]}: {address}\n"
+
+        distance = result['landmarks'][0].get('distance')
+        hotel['text'] += f"{PHRASES['Distance'][lang_id]}: {distance}\n"
+
+        url = f"https://ru.hotels.com/ho{result['id']}"
+        hotel['text'] += f"{PHRASES['URL'][lang_id]}: {url}\n"
+
+        price = result['ratePlan']['price'].get('current')
+        hotel['text'] += f"{PHRASES['Price'][lang_id]}: {price}\n"
+
+        tot_price = result['ratePlan']['price'].get('exactCurrent')
+        tot_price *= req_params['days']
+        hotel['text'] += f"{PHRASES['Tot_price'][lang_id]}: " \
+                         f"{tot_price} {PHRASES['Curr'][lang_id]}"
+
+        if req_params['pictures'] > 0:
+            try:
+                hotel['pictures']: list = get_pics_urls(
+                    result['id'], req_params['pictures']
+                )
+            except Exception as e:
+                logger.error(f"{user_id} pictures url getting err: "
+                             f"hotel id {result['id']} - {e}")
+    except Exception as e:
+        raise Exception(f"hotel id {result['id']} - {e}")
+
+    return hotel

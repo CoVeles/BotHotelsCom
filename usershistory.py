@@ -15,6 +15,7 @@ class User:
         self.user_id: int = user_id
         self.command: str = 'start'
         self.state: int = 0
+        self.lang_id: int = 0
         self.req_params = dict()
         User.add_user(user_id, self)
 

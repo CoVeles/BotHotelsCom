@@ -16,12 +16,12 @@ def get_pics_urls(hotel_id: str, number_of_pics: int) -> list:
     try:
         response = requests.request("GET", url, headers=headers, params=querystring)
     except requests.exceptions.RequestException as e:
-        return [f'Server error: {e}']
-    data = response.json()
+        raise Exception(f'req_err: {e}')
     try:
+        data = response.json()
         pics: list = [pic_url['baseUrl'].replace('{size}', 'b')
                       for pic_url in data['hotelImages'][:number_of_pics]]
     except Exception as e:
-        return [f'Pictures parsing error: {e}']
+        raise Exception(f'Pictures parsing error: {e}')
     return pics
 
