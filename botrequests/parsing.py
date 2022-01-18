@@ -1,6 +1,7 @@
+from loguru import logger
+
 from botrequests.pictures import get_pics_urls
 from constants import PHRASES
-from loguru import logger
 
 
 def parse_hotel_info(result: dict, user_id: int,

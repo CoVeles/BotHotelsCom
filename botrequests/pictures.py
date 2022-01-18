@@ -1,5 +1,5 @@
-from decouple import config
 import requests
+from decouple import config
 
 X_RAPIDAPI_KEY = config('RAPIDAPI_KEY')
 

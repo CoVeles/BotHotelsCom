@@ -1,5 +1,5 @@
-import datetime
 import sqlite3
+
 from loguru import logger
 
 
@@ -45,8 +45,11 @@ class UserHistory:
     def __init__(self, dbname="users_history.sqlite"):
         self.dbname = dbname
         logger.info('Attempt to create a DB file')
-        self.connection = sqlite3.connect(dbname)
-        self.cursor = self.connection.cursor()
+        try:
+            self.connection = sqlite3.connect(dbname)
+            self.cursor = self.connection.cursor()
+        except Exception as e:
+            logger.error(f'Error during creating DB file: {e}')
 
     def setup(self) -> None:
         """Creating a table and index if not exist"""
@@ -58,9 +61,12 @@ class UserHistory:
         user_id_idx = '''CREATE INDEX IF NOT EXISTS commandsIndex 
                         ON userCommands (user_id ASC)'''
         logger.info('Attempt to create tables for history')
-        with self.connection:
-            self.cursor.execute(tbl_stmt)
-            self.cursor.execute(user_id_idx)
+        try:
+            with self.connection:
+                self.cursor.execute(tbl_stmt)
+                self.cursor.execute(user_id_idx)
+        except Exception as e:
+            logger.error(f'Error during creating table in DB file: {e}')
 
     def add_user_command(self, user_id: int, command: str,
                           datetime: str, hotels: str) -> None:
@@ -74,12 +80,6 @@ class UserHistory:
                 self.cursor.execute(stmt, args)
         except Exception as e:
             logger.error(f'DB error: {e}')
-
-    # def delete_user(self, user_id: int) -> None:
-    #     stmt = "DELETE FROM userCommands WHERE user_id = (?)"
-    #     args = (user_id,)
-    #     self.connection.execute(stmt, args)
-    #     self.connection.commit()
 
     def get_commands_for_user(self, user_id: int) -> list:
         stmt = "SELECT * FROM userCommands WHERE user_id = (?)"

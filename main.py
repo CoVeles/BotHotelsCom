@@ -1,19 +1,16 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
-from loguru import logger
+
 from decouple import config
+from loguru import logger
 from telebot import types, TeleBot
-from telebot.types import CallbackQuery
 from telegram_bot_calendar import DetailedTelegramCalendar, LSTEP
+
 import constants
 import log_setup
 from botrequests import lowprice, highprice, bestdeal
 from botrequests.locations import get_locations_from_api
 from usershistory import User as User, UserHistory
-
-
-class NoneUsrError(Exception):
-    pass
 
 
 logger.configure(**log_setup.logger_setup)
@@ -38,7 +35,7 @@ def create_keyboard(items: dict, prefix: str,
 
 
 @bot.message_handler(commands=['start'])
-def on_start(message):
+def on_start(message: types.Message) -> None:
     user_id = message.chat.id
     logger.info(f'User {user_id} tapped /start')
     user = User.get_user(user_id)
@@ -60,13 +57,10 @@ def on_start(message):
 
 
 @bot.callback_query_handler(func=DetailedTelegramCalendar.func())
-def calendar_callback(call: CallbackQuery):
+def calendar_callback(call: types.CallbackQuery) -> None:
     user_id = call.message.chat.id
-    try:
-        user = get_user(user_id)
-    except NoneUsrError:
-        pass
-    else:
+    user = get_user(user_id)
+    if user:
         locale = constants.LANGUAGE_FOR_CALENDAR[user.lang_id]
         result, key, step = DetailedTelegramCalendar(
             locale=locale).process(call.data)
@@ -88,15 +82,11 @@ def calendar_callback(call: CallbackQuery):
 
 
 @bot.callback_query_handler(func=None)
-def command_callback(call: CallbackQuery):
+def command_callback(call: types.CallbackQuery):
     command: list = call.data.split()
     user_id = call.message.chat.id
-
-    try:
-        user = get_user(user_id)
-    except NoneUsrError:
-        pass
-    else:
+    user = get_user(user_id)
+    if user:
         if command[0] == 'cmd' and user.state == 0:
             logger.info(f'{user_id} tapped command: {command[1]}')
             if command[1] == 'history':
@@ -183,11 +173,8 @@ def command_callback(call: CallbackQuery):
 @bot.message_handler(content_types=['text'])
 def get_text_messages(message) -> None:
     user_id = message.chat.id
-    try:
-        user = get_user(user_id)
-    except NoneUsrError:
-        pass
-    else:
+    user = get_user(user_id)
+    if user:
         if user.state == 1:
             display_found_locations_menu(message.text, user_id,
                                          user.lang_id)
@@ -202,6 +189,21 @@ def get_text_messages(message) -> None:
             logger.warning(f'{user_id} typed wrong text')
             text = constants.PHRASES['err_txt'][user.lang_id]
             bot.send_message(user_id, text)
+
+
+def display_found_locations_menu(mess_text: str, user_id: int,
+                                 lang_id: int) -> None:
+    """Display menu of found locations"""
+    locations = get_locations_from_api(mess_text, lang_id, user_id)
+    if len(locations) == 0:
+        text = constants.PHRASES['err_town_search'][lang_id]
+        bot.send_message(user_id, text)
+    else:
+        text = constants.PHRASES['sel_loc'][lang_id]
+        bot.send_message(chat_id=user_id,
+                         text=text,
+                         reply_markup=create_keyboard(
+                             locations, 'loc', lang_id))
 
 
 def check_and_save_days_delta(text: str, mess_id: int, user: User) -> None:
@@ -223,7 +225,17 @@ def check_and_save_days_delta(text: str, mess_id: int, user: User) -> None:
     except Exception as e:
         logger.error(f'User {user.user_id}: {e}')
         text = constants.PHRASES['err_days'][user.lang_id]
-        bot.send_message(user.user_id,text)
+        bot.send_message(user.user_id, text)
+
+
+def step_after_pics_query(user: User) -> None:
+    if user.command == 'bestdeal':
+        """Ask min price"""
+        text = constants.PHRASES['input_minp'][user.lang_id]
+        bot.send_message(user.user_id, text)
+    else:
+        user.set_state(11)
+        display_hotels(user, user.user_id)
 
 
 def check_and_save_min_price(text: str, user: User) -> None:
@@ -267,21 +279,6 @@ def check_and_save_max_price(text: str, user: User) -> None:
         bot.send_message(user.user_id, text)
 
 
-def display_found_locations_menu(mess_text: str, user_id: int,
-                                 lang_id: int) -> None:
-    """Display menu of found locations"""
-    locations = get_locations_from_api(mess_text, lang_id, user_id)
-    if len(locations) == 0:
-        text = constants.PHRASES['err_town_search'][lang_id]
-        bot.send_message(user_id, text)
-    else:
-        text = constants.PHRASES['sel_loc'][lang_id]
-        bot.send_message(chat_id=user_id,
-                         text=text,
-                         reply_markup=create_keyboard(
-                             locations, 'loc', lang_id))
-
-
 def display_hotels(user: User, chat_id: int) -> None:
     hotels = []
     logger.info(f'Attempt to request hotels info from API')
@@ -296,7 +293,6 @@ def display_hotels(user: User, chat_id: int) -> None:
                                      user.lang_id)
 
     if len(hotels) == 0:
-        logger.info(f'{chat_id} there is no any hotel in request')
         text = f"{constants.PHRASES['none_htls'][user.lang_id]}" \
                f"\n{constants.PHRASES['restart'][user.lang_id]}"
         bot.send_message(chat_id, text)
@@ -368,28 +364,6 @@ def display_help(user_id: int, lang_id: int) -> None:
     bot.send_message(user_id, text)
 
 
-def step_after_pics_query(user: User) -> None:
-    if user.command == 'bestdeal':
-        """Ask min price"""
-        text = constants.PHRASES['input_minp'][user.lang_id]
-        bot.send_message(user.user_id, text)
-    else:
-        user.set_state(11)
-        display_hotels(user, user.user_id)
-
-
-def get_user(user_id: int) -> User:
-    user = User.get_user(user_id)
-    if not user:
-        logger.warning(f'User {user_id} tried to begin without /start')
-        text = f"{constants.PHRASES['none_usr'][0]}" \
-               f"\n{constants.PHRASES['restart'][0]}"
-        bot.send_message(user_id, text)
-        raise NoneUsrError
-    else:
-        return user
-
-
 def ask_language(user_id: int, lang_id: int,
                  mess_id: int) -> None:
     text = constants.PHRASES['sel_lang'][lang_id]
@@ -399,6 +373,23 @@ def ask_language(user_id: int, lang_id: int,
         text=text,
         reply_markup=create_keyboard(constants.LANGUAGE_MENU,
                                      'lang', lang_id))
+
+
+def get_user(user_id: int) -> [User, None]:
+    """
+    Attempt to get user from dictionary in class User
+    :param user_id:
+    :return: if getting is successful return object User
+    else send mess to an user to begin with main menu
+    """
+    user = User.get_user(user_id)
+    if user:
+        return user
+    else:
+        logger.warning(f'User {user_id} tried to begin without /start')
+        text = f"{constants.PHRASES['none_usr'][0]}" \
+               f"\n{constants.PHRASES['restart'][0]}"
+        bot.send_message(user_id, text)
 
 
 if __name__ == '__main__':

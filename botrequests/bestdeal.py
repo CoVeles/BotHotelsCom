@@ -1,9 +1,11 @@
-from decouple import config
 from datetime import timedelta
+
 import requests
+from decouple import config
+from loguru import logger
+
 from constants import LANGUAGE_FOR_REQUEST, CURRENCY
 from botrequests.parsing import parse_hotel_info
-from loguru import logger
 
 X_RAPIDAPI_KEY = config('RAPIDAPI_KEY')
 
@@ -53,4 +55,3 @@ def get_hotels(req_params: dict, user_id: int,
     except Exception as e:
         logger.error(f'{user_id} {e}')
     return hotels
-

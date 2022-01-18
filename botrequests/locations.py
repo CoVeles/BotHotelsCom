@@ -1,18 +1,12 @@
+import re
+
 from decouple import config
 import requests
-import re
-from constants import LANGUAGE_FOR_REQUEST, CURRENCY
 from loguru import logger
 
+from constants import LANGUAGE_FOR_REQUEST, CURRENCY
+
 X_RAPIDAPI_KEY = config('RAPIDAPI_KEY')
-
-
-class ParsingLocError(Exception):
-    pass
-
-
-class ParsingLocNull(Exception):
-    pass
 
 
 def get_locations_from_api(loc_name: str, lang_id: int,
@@ -26,7 +20,7 @@ def get_locations_from_api(loc_name: str, lang_id: int,
         'x-rapidapi-key': X_RAPIDAPI_KEY
     }
     logger.info(f'Attempt to request locations from API')
-    locations = {}
+    locations = dict()
     try:
         response = requests.request('GET', url, headers=headers,
                                     params=querystring, timeout=20)
@@ -34,32 +28,25 @@ def get_locations_from_api(loc_name: str, lang_id: int,
         if data.get('message'):
             raise requests.exceptions.RequestException
 
-        locations: dict = parse_locations(data)
+        locations: dict = parse_locations(data, user_id)
 
     except requests.exceptions.RequestException as e:
         logger.error(f'{user_id}: req_err - {e}')
-    except ParsingLocError:
-        logger.error(f'{user_id}: parsing locations err')
-    except ParsingLocNull:
-        logger.error(f'{user_id}: locations not found')
     except Exception as e:
         logger.error(f'{user_id}: locations err - {e}')
     return locations
 
 
-def parse_locations(data: requests) -> dict:
+def parse_locations(data: requests, user_id: int) -> dict:
+    locations = dict()
     try:
-        locations = dict()
-        if len(data.get('suggestions')[0].get('entities')) > 0:
+        if len(data.get('suggestions')[0].get('entities')) == 0:
+            logger.info(f'{user_id}: locations not found')
+        else:
             for item in data.get('suggestions')[0].get('entities'):
-
                 location_name = re.sub('<([^<>]*)>', '', item['caption'])
                 locations[item['destinationId']] = (location_name,
                                                     location_name)
-            return locations
-        else:
-            raise ParsingLocNull
-    except ParsingLocNull:
-        raise ParsingLocNull
-    except Exception:
-        raise ParsingLocError
+    except Exception as e:
+        logger.error(f'{user_id}: parsing locations err: {e}')
+    return locations

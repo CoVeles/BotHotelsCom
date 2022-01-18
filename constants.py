@@ -135,7 +135,7 @@ PHRASES = {
     'Distance': ('Distance to city center',
                  'Расстояние до центра города'),
     'URL': ('Hotel URL', 'URL отеля'),
-    'Price': ('Price a day:', 'Цена за один день:'),
+    'Price': ('Price a day', 'Цена за один день'),
     'Tot_price': ('Total_price:', 'Общая цена:'),
     'Command': ('Command', 'Команда'),
     'DateTime': ('Date&Time', 'Дата и время'),
