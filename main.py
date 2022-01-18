@@ -82,7 +82,7 @@ def calendar_callback(call: types.CallbackQuery) -> None:
 
 
 @bot.callback_query_handler(func=None)
-def command_callback(call: types.CallbackQuery):
+def command_callback(call: types.CallbackQuery) -> None:
     command: list = call.data.split()
     user_id = call.message.chat.id
     user = get_user(user_id)
