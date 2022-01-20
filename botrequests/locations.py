@@ -45,8 +45,7 @@ def parse_locations(data: requests, user_id: int) -> dict:
         else:
             for item in data.get('suggestions')[0].get('entities'):
                 location_name = re.sub('<([^<>]*)>', '', item['caption'])
-                locations[item['destinationId']] = (location_name,
-                                                    location_name)
+                locations[item['destinationId']] = (location_name, location_name)
     except Exception as e:
         logger.error(f'{user_id}: parsing locations err: {e}')
     return locations

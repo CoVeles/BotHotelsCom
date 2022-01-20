@@ -29,8 +29,10 @@ def parse_hotel_info(result: dict, user_id: int,
         hotel['text'] += f"{PHRASES['Price'][lang_id]}: {price}\n"
 
         tot_price = result['ratePlan']['price'].get('exactCurrent')
-        tot_price *= req_params['days']
-        hotel['text'] += f"{PHRASES['Tot_price'][lang_id]}: " \
+        tot_price *= round(req_params['days'], 2)
+        hotel['text'] += f"{PHRASES['Tot_price'][lang_id]} " \
+                         f"{req_params['days']} " \
+                         f"{PHRASES['Days'][lang_id]}: " \
                          f"{tot_price} {PHRASES['Curr'][lang_id]}"
 
         if req_params['pictures'] > 0:

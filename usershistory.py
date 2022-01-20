@@ -16,6 +16,7 @@ class User:
         self.command: str = 'start'
         self.state: int = 0
         self.lang_id: int = 0
+        self.locations = dict()
         self.req_params = dict()
         User.add_user(user_id, self)
 
@@ -35,6 +36,7 @@ class User:
     def init_req_params(self) -> None:
         """Reset user parameters"""
         self.state = 0
+        self.locations = dict()
         self.req_params: dict = {'loc_id': '', 'hotels_amount': 0,
                                  'price_min': 0, 'price_max': 0,
                                  'distance': 0, 'pictures': 0,

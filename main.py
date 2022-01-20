@@ -75,7 +75,8 @@ def calendar_callback(call: types.CallbackQuery) -> None:
             user.req_params['check_in'] = result
             user.set_state(4)
             logger.info(f'{user_id} selected check-in date')
-            text = constants.PHRASES['days'][user.lang_id]
+            text = f"{constants.PHRASES['date'][user.lang_id]} {result}" \
+                   f"\n{constants.PHRASES['days'][user.lang_id]}"
             bot.edit_message_text(chat_id=user_id,
                                   message_id=call.message.message_id,
                                   text=text)
@@ -109,14 +110,33 @@ def command_callback(call: types.CallbackQuery) -> None:
             logger.info(f'{user_id} selected specific location')
             user.req_params['loc_id'] = command[1]
             user.state = 2
-            """Ask amount of hotels"""
-            text = constants.PHRASES['sel_ah'][user.lang_id]
+            loc_name = user.locations.get(command[1])[user.lang_id]
+            text = f"{constants.PHRASES['location'][user.lang_id]}" \
+                   f" {loc_name}"
             bot.edit_message_text(
                 chat_id=user_id,
                 message_id=call.message.message_id,
                 text=text,
+            )
+            """Ask amount of hotels"""
+            text = constants.PHRASES['sel_ah'][user.lang_id]
+            # bot.edit_message_text(
+            #     chat_id=user_id,
+            #     message_id=call.message.message_id,
+            #     text=text,
+            # )
+            bot.send_message(
+                chat_id=user_id,
+                text=text,
                 reply_markup=create_keyboard(constants.HOTELS_AMOUNT,
-                                             'ham', user.lang_id))
+                                             'ham', user.lang_id)
+            )
+            # bot.edit_message_text(
+            #     chat_id=user_id,
+            #     message_id=call.message.message_id,
+            #     text=text,
+            #     reply_markup=create_keyboard(constants.HOTELS_AMOUNT,
+            #                                  'ham', user.lang_id))
         elif command[0] == 'ham' and user.state == 2:
             logger.info(f'{user_id} selected amount of hotels')
             user.state = 3
@@ -126,13 +146,23 @@ def command_callback(call: types.CallbackQuery) -> None:
             calendar, step = DetailedTelegramCalendar(
                 locale=locale
             ).build()
-            text = constants.PHRASES['sel_date'][user.lang_id]
-            bot.send_message(user_id, text)
-            text = f"{constants.PHRASES['select'][user.lang_id]} " \
+            # text = constants.PHRASES['sel_date'][user.lang_id]
+            # bot.send_message(user_id, text)
+            # text = f"\n{constants.PHRASES['select'][user.lang_id]} " \
+            #        f"{LSTEP[step]}"
+            # bot.send_message(user_id,
+            #                  text,
+            #                  reply_markup=calendar)
+            text = f"{constants.PHRASES['sel_date'][user.lang_id]}" \
+                   f"\n{constants.PHRASES['select'][user.lang_id]} " \
                    f"{LSTEP[step]}"
-            bot.send_message(user_id,
-                             text,
-                             reply_markup=calendar)
+            bot.edit_message_text(
+                chat_id=user_id,
+                message_id=call.message.message_id,
+                text=text,
+                reply_markup=calendar
+            )
+
         elif command[0] == 'pic' and user.state == 5:
             logger.info(f'{user_id} selected the need of pictures')
             if command[1] == 'yes':
@@ -147,15 +177,17 @@ def command_callback(call: types.CallbackQuery) -> None:
                                                  'pnum', user.lang_id))
             else:
                 user.state = 7
-                step_after_pics_query(user)
+                step_after_pics_query(user, call.message.message_id)
         elif command[0] == 'pnum' and user.state == 6:
             logger.info(f'{user_id} selected amount of pictures')
             user.state = 7
             user.req_params['pictures'] = int(command[1])
-            step_after_pics_query(user)
+            step_after_pics_query(user, call.message.message_id)
         elif command[0] == 'dst' and user.state == 9:
             logger.info(f'{user_id} selected distance')
             user.req_params['distance'] = command[1]
+            send_waiting_mess(user_id, user.lang_id,
+                              call.message.message_id)
             display_hotels(user, user_id)
         elif command[0] == 'lang' and user.state == 0:
             logger.info(f'{user_id} selected language: {command[1]}')
@@ -176,11 +208,9 @@ def get_text_messages(message) -> None:
     user = get_user(user_id)
     if user:
         if user.state == 1:
-            display_found_locations_menu(message.text, user_id,
-                                         user.lang_id)
+            display_found_locations_menu(message.text, user_id)
         elif user.state == 4:
-            check_and_save_days_delta(message.text,
-                                      message.message_id, user)
+            check_and_save_days_delta(message.text, user)
         elif user.command == 'bestdeal' and user.state == 7:
             check_and_save_min_price(message.text, user)
         elif user.command == 'bestdeal' and user.state == 8:
@@ -191,22 +221,24 @@ def get_text_messages(message) -> None:
             bot.send_message(user_id, text)
 
 
-def display_found_locations_menu(mess_text: str, user_id: int,
-                                 lang_id: int) -> None:
+def display_found_locations_menu(mess_text: str,
+                                 user_id: int) -> None:
     """Display menu of found locations"""
-    locations = get_locations_from_api(mess_text, lang_id, user_id)
+    user = get_user(user_id)
+    locations = get_locations_from_api(mess_text, user.lang_id, user_id)
     if len(locations) == 0:
-        text = constants.PHRASES['err_town_search'][lang_id]
+        text = constants.PHRASES['err_town_search'][user.lang_id]
         bot.send_message(user_id, text)
     else:
-        text = constants.PHRASES['sel_loc'][lang_id]
+        user.locations = locations
+        text = constants.PHRASES['sel_loc'][user.lang_id]
         bot.send_message(chat_id=user_id,
                          text=text,
                          reply_markup=create_keyboard(
-                             locations, 'loc', lang_id))
+                             locations, 'loc', user.lang_id))
 
 
-def check_and_save_days_delta(text: str, mess_id: int, user: User) -> None:
+def check_and_save_days_delta(text: str, user: User) -> None:
     try:
         logger.info(f'{user.user_id} typed amount of days')
         days = abs(int(text))
@@ -228,13 +260,18 @@ def check_and_save_days_delta(text: str, mess_id: int, user: User) -> None:
         bot.send_message(user.user_id, text)
 
 
-def step_after_pics_query(user: User) -> None:
+def step_after_pics_query(user: User, mess_id: int) -> None:
     if user.command == 'bestdeal':
         """Ask min price"""
         text = constants.PHRASES['input_minp'][user.lang_id]
-        bot.send_message(user.user_id, text)
+        bot.edit_message_text(
+            chat_id=user.user_id,
+            message_id=mess_id,
+            text=text)
     else:
         user.set_state(11)
+        send_waiting_mess(user.user_id, user.lang_id,
+                          mess_id)
         display_hotels(user, user.user_id)
 
 
@@ -267,7 +304,7 @@ def check_and_save_max_price(text: str, user: User) -> None:
         else:
             user.state = 9
             user.req_params['price_max'] = price
-            text = constants.PHRASES['input_dist'][user.lang_id]
+            text = constants.PHRASES['sel_dist'][user.lang_id]
             bot.send_message(chat_id=user.user_id,
                              text=text,
                              reply_markup=create_keyboard(
@@ -282,6 +319,7 @@ def check_and_save_max_price(text: str, user: User) -> None:
 def display_hotels(user: User, chat_id: int) -> None:
     hotels = []
     logger.info(f'Attempt to request hotels info from API')
+
     if user.command == 'lowprice':
         hotels = lowprice.get_hotels(user.req_params, user.user_id,
                                      user.lang_id)
@@ -390,6 +428,15 @@ def get_user(user_id: int) -> [User, None]:
         text = f"{constants.PHRASES['none_usr'][0]}" \
                f"\n{constants.PHRASES['restart'][0]}"
         bot.send_message(user_id, text)
+
+
+def send_waiting_mess(user_id: int, lang_id: int,
+                      mess_id: int) -> None:
+    text = f"{constants.PHRASES['wait'][lang_id]}"
+    bot.edit_message_text(
+        chat_id=user_id,
+        message_id=mess_id,
+        text=text)
 
 
 if __name__ == '__main__':
